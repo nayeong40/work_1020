@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>2027년 국방예산 중점 투자사업 — 분야별 · 신규사업별 대시보드</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- SheetJS (온라인 시 활용, 오프라인 시에도 parser.js 내장 네이티브 XLSX/CSV 파서가 자동 동작) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+</head>
+<body>
+
+  <!-- 상단 헤더 & 엑셀/CSV 업로드 영역 -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand-area">
+        <div class="header-badges">
+          <span class="h-badge">🛡️ 국방예산 중점 투자사업 분석 시스템</span>
+          <span class="h-badge">📊 분야별(①~⑧) 대시보드</span>
+          <span class="h-badge new-highlight">🚀 신규·신설 사업 대시보드</span>
+        </div>
+        <h1 class="app-title" id="pageTitle">2027년 국방예산 중점 투자사업 (본문 박스 기준) 2026년·2027년 예산 수치자료</h1>
+        <p class="app-subtitle" id="pageSubtitle">※ 출처: 2027년 국방예산 정부안 편성 보도자료(p.2~6 박스 내 수치 및 붙임2 연계 수치) | 예산 단위: 억 원 (신규 사업의 ’26년 예산은 0원으로 표기)</p>
+      </div>
+
+      <div class="upload-panel">
+        <div class="upload-dropzone" id="uploadDropzone" title="클릭하거나 엑셀(.xlsx, .xls) 또는 CSV(.csv) 파일을 이곳에 끌어다 놓으세요">
+          <span class="upload-icon">📂</span>
+          <div class="upload-text-group">
+            <div class="upload-main-text">엑셀(.xlsx) · CSV 파일 업로드 (클릭 또는 드래그)</div>
+            <div class="upload-sub-text">동일 양식의 엑셀·CSV 입력 시 분야별·신규사업별 대시보드 자동 갱신</div>
+          </div>
+          <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.txt" style="display:none;" />
+        </div>
+        <div class="header-actions">
+          <button type="button" class="btn btn-glass" id="btnResetDefault">🔄 기본 데이터 복원</button>
+          <button type="button" class="btn btn-glass" id="btnExportAllCsv">📥 전체표 CSV 저장</button>
+          <button type="button" class="btn btn-glass" id="btnExportNewCsv">📥 신규사업 CSV 저장</button>
+          <button type="button" class="btn btn-glass" onclick="window.print()">🖨️ 인쇄 / PDF</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 메인 탭 네비게이션 & 현재 로드된 파일 상태바 -->
+  <nav class="nav-status-bar">
+    <div class="nav-status-inner">
+      <div class="main-tabs">
+        <button type="button" class="tab-btn active" data-tab="category">
+          🏛️ 분야별 대시보드 <span class="tab-count" id="tabCatCount">8개 분야</span>
+        </button>
+        <button type="button" class="tab-btn tab-new" data-tab="new">
+          🚀 신규사업별 대시보드 <span class="tab-count" id="tabNewCount">9건</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="raw">
+          📋 원본 데이터 · 비예산 지표 · 항목추가 <span class="tab-count" id="tabRawCount">21행</span>
+        </button>
+      </div>
+
+      <div class="file-status-area">
+        <select id="sheetSelector" class="sheet-select" style="display:none;" title="엑셀 시트 전환"></select>
+        <div class="status-pill">
+          <span class="status-dot"></span>
+          <span>적용 데이터: <strong id="loadedFileName">기본 내장 데이터</strong></span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- 메인 대시보드 컨테이너 -->
+  <main class="main-container">
+
+    <!-- ===============================================================
+         TAB 1: 🏛️ 분야별 대시보드
+         =============================================================== -->
+    <section class="tab-pane active" id="tab-category">
+      <!-- 상단 제어 툴바 -->
+      <div class="view-toolbar">
+        <div class="toolbar-left">
+          <span class="toolbar-label">⚙️ 분야별 합산 기준:</span>
+          <div class="segmented-control">
+            <button type="button" class="seg-btn active" data-sum-mode="excludeSub" title="총괄 예산이 있는 분야(③, ④)의 하위 내역사업(└)을 중복 합산하지 않습니다">
+              중점분야 총괄 기준 (내역 중복제외 · 권장)
+            </button>
+            <button type="button" class="seg-btn" data-sum-mode="all" title="표에 기재된 모든 세부 행을 단순 합산합니다">
+              세부 항목 단순 합산
+            </button>
+          </div>
+        </div>
+
+        <div class="toolbar-right">
+          <span class="toolbar-label">📊 비교 차트 스케일:</span>
+          <div class="segmented-control">
+            <button type="button" class="seg-btn active" data-scale-mode="excludeCat1" title="① 전작권 전환(12.1조원)을 제외하여 ②~⑧번 분야의 예산 규모를 상세 비교합니다">
+              ②~⑧ 분야 상세 비교 (① 제외)
+            </button>
+            <button type="button" class="seg-btn" data-scale-mode="all" title="①~⑧ 전 분야를 동일 스케일로 비교합니다">
+              ①~⑧ 전체 분야 보기
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 분야별 핵심 KPI 4종 -->
+      <div class="kpi-grid" id="catKpiGrid"></div>
+
+      <!-- 분야별 비교 차트 2종 -->
+      <div class="charts-row">
+        <div class="card-box">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div class="card-title">📊 중점 투자사업 분야별 2026년 vs 2027년 예산 비교</div>
+              <div class="card-subtitle">막대를 클릭하면 해당 분야의 세부 추진 내용과 하위 사업을 집중 분석합니다 (단위: 억 원)</div>
+            </div>
+          </div>
+          <div id="catCompareChartBox"></div>
+        </div>
+
+        <div class="card-box">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div class="card-title">📈 분야별 예산 증감률(성장률) 및 순수 신규분야 순위</div>
+              <div class="card-subtitle">전년 대비 증가폭이 큰 중점 분야 및 2027년 순수 신규 편성 분야</div>
+            </div>
+          </div>
+          <div id="catGrowthChartBox"></div>
+        </div>
+      </div>
+
+      <!-- 선택된 분야 집중 분석(드릴다운) 영역 -->
+      <div class="cat-drilldown" id="categoryDrilldownBox" style="display:none;"></div>
+
+      <!-- 8대 분야 인터랙티브 요약 카드 그리드 -->
+      <div class="card-box">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="card-title">🗂️ 8대 중점 투자사업 분야별 종합 현황 카드 (①~⑧)</div>
+            <div class="card-subtitle">각 분야 카드를 클릭하면 세부 추진 목표·핵심 불릿·연계 비예산 지표 및 아래 세부사업 표가 연동 필터링됩니다</div>
+          </div>
+        </div>
+        <div class="category-cards-grid" id="categoryCardsGrid"></div>
+      </div>
+
+      <!-- 분야별 세부 사업·항목 데이터 테이블 -->
+      <div class="card-box">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="card-title">📑 분야별 박스 내 세부 사업·항목 예산 명세표</div>
+            <div class="card-subtitle">열 제목(2026년 예산, 2027년 예산, 증감액, 증감률)을 클릭하여 오름차순/내림차순 정렬할 수 있습니다</div>
+          </div>
+        </div>
+
+        <div class="table-filter-bar">
+          <div class="filter-controls">
+            <select id="catFilterSelect" class="filter-select"></select>
+            <select id="catTypeSelect" class="filter-select">
+              <option value="ALL">전체 예산 구분</option>
+              <option value="TOTAL">중점분야 총괄</option>
+              <option value="DIRECT">박스 직접예산</option>
+              <option value="LINKED">붙임2 연계예산</option>
+              <option value="NEW">신규 사업만 보기</option>
+            </select>
+            <input type="text" id="catSearchInput" class="search-input" placeholder="🔍 분야명, 세부 사업명, 참고사항 검색..." />
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="budget-table">
+            <thead>
+              <tr>
+                <th style="width:70px;" data-sort-key="catNo">분야번호 ↕</th>
+                <th style="width:210px;" data-sort-key="category">중점 투자사업 분야 ↕</th>
+                <th data-sort-key="projectName">박스 내 세부 사업·항목명 ↕</th>
+                <th style="width:130px;" data-sort-key="type">구분 ↕</th>
+                <th style="width:125px;" data-sort-key="budget2026">2026년 예산(억원) ↕</th>
+                <th style="width:125px;" data-sort-key="budget2027">2027년 예산(억원) ↕</th>
+                <th style="width:115px;" data-sort-key="diff">증감액(억원) ↕</th>
+                <th style="width:95px;" data-sort-key="rate">증감률 ↕</th>
+                <th>박스 원문 표기 및 참고사항</th>
+              </tr>
+            </thead>
+            <tbody id="catTableBody"></tbody>
+            <tfoot id="catTableFoot"></tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===============================================================
+         TAB 2: 🚀 신규사업별 대시보드
+         =============================================================== -->
+    <section class="tab-pane" id="tab-new">
+      <!-- 신규사업 추출 기준 제어 바 -->
+      <div class="view-toolbar">
+        <div class="toolbar-left">
+          <span class="toolbar-label">🚀 신규사업 추출 범위:</span>
+          <div class="segmented-control">
+            <button type="button" class="seg-btn seg-rose active" data-new-mode="strict" title="구분에 (신규)가 명시된 9대 순수 신규·신설 사업 (1,503억 원)">
+              순수 신규·신설 사업 (구분 '신규' 9건 · 1,503억원)
+            </button>
+            <button type="button" class="seg-btn seg-rose" data-new-mode="allNew" title="초급간부 처우개선 추가소요(+2.0%p, 316억)까지 포함한 증감률 '신규' 전체 항목 (10건 · 1,819억원)">
+              증감률 '신규' 전체 포함 (10건 · 1,819억원)
+            </button>
+          </div>
+        </div>
+
+        <div class="toolbar-right">
+          <input type="text" id="newSearchInput" class="search-input" placeholder="🔍 신규 사업명, 분야, 원문 참고사항 검색..." />
+        </div>
+      </div>
+
+      <!-- 신규사업 핵심 KPI 4종 -->
+      <div class="kpi-grid" id="newKpiGrid"></div>
+
+      <!-- 신규사업 시각화 차트 2종 -->
+      <div class="charts-row equal">
+        <div class="card-box">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div class="card-title">🏆 2027년 신규·신설 사업 예산 규모 순위 (Top Ranking)</div>
+              <div class="card-subtitle">국방반도체(565억), 피지컬 AI 실증(430억) 등 핵심 신규 투자사업 규모 비교 (단위: 억 원)</div>
+            </div>
+          </div>
+          <div id="newRankingChartBox"></div>
+        </div>
+
+        <div class="card-box">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div class="card-title">🎯 중점분야별 · 편성구분별 신규사업 집중도 분석</div>
+              <div class="card-subtitle">분야 클릭 시 해당 분야의 신규사업만 하단 카드 및 표에 필터링됩니다</div>
+            </div>
+          </div>
+          <div id="newCategoryDistBox"></div>
+        </div>
+      </div>
+
+      <!-- 분야별 신규사업 필터 버튼 바 -->
+      <div class="view-toolbar" style="padding:10px 16px;">
+        <div class="toolbar-left">
+          <span class="toolbar-label">📌 분야별 신규사업 빠른 필터:</span>
+          <div class="segmented-control" id="newCategoryFilterPills" style="flex-wrap:wrap;"></div>
+        </div>
+      </div>
+
+      <!-- 신규사업 카드 갤러리 -->
+      <div class="card-box">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="card-title">✨ 2027년 신규·신설 사업 개별 인사이트 카드</div>
+            <div class="card-subtitle">사업별 2027년 신규 편성 예산, 전체 신규예산 내 비중(%), 보도자료 원문 참고사항</div>
+          </div>
+        </div>
+        <div class="new-projects-grid" id="newProjectsCardGrid"></div>
+      </div>
+
+      <!-- 신규사업 상세 비교 테이블 -->
+      <div class="card-box">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="card-title">📋 2027년 국방예산 중점 투자사업 내 [신규·신설 사업] 추출 명세표</div>
+            <div class="card-subtitle">열 제목을 클릭하면 사업명·예산규모·분야순으로 정렬할 수 있습니다 (단위: 억 원)</div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="budget-table">
+            <thead>
+              <tr>
+                <th style="width:55px;">연번</th>
+                <th style="width:70px;" data-new-sort="catNo">분야번호 ↕</th>
+                <th style="width:210px;" data-new-sort="category">중점 투자사업 분야 ↕</th>
+                <th data-new-sort="projectName">신규·신설 사업명 (박스 기준) ↕</th>
+                <th style="width:135px;" data-new-sort="type">구분 ↕</th>
+                <th style="width:110px;">2026년(억원)</th>
+                <th style="width:125px;" data-new-sort="budget2027">2027년 예산(억원) ↕</th>
+                <th style="width:115px;" data-new-sort="diff">증감액(억원) ↕</th>
+                <th style="width:130px;" data-new-sort="budget2027">신규예산 비중 ↕</th>
+                <th>박스 원문 표기 및 참고사항</th>
+              </tr>
+            </thead>
+            <tbody id="newTableBody"></tbody>
+            <tfoot id="newTableFoot"></tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===============================================================
+         TAB 3: 📋 원본 수치표 · 비예산 지표 · 데이터 편집
+         =============================================================== -->
+    <section class="tab-pane" id="tab-raw">
+      <div class="card-box">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="card-title">📋 원본 엑셀/CSV 수치자료 전체 테이블 (항목 추가·삭제 및 CSV 내보내기 지원)</div>
+            <div class="card-subtitle">업로드된 엑셀/CSV 데이터의 원본 행 구성을 확인하고 새로운 사업 항목을 직접 추가하거나 편집할 수 있습니다</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="rawSearchInput" class="search-input" placeholder="🔍 전체 항목 검색..." />
+            <button type="button" class="btn btn-primary" id="btnOpenAddModal">➕ 새 예산 항목 추가</button>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="budget-table">
+            <thead>
+              <tr>
+                <th style="width:65px;">분야번호</th>
+                <th style="width:200px;">중점 투자사업 분야</th>
+                <th>박스 내 세부 사업·항목명</th>
+                <th style="width:130px;">구분</th>
+                <th style="width:115px;">2026년 예산(억원)</th>
+                <th style="width:115px;">2027년 예산(억원)</th>
+                <th style="width:110px;">증감액(억원)</th>
+                <th style="width:85px;">증감률</th>
+                <th>박스 원문 표기 및 참고사항</th>
+                <th style="width:65px;">관리</th>
+              </tr>
+            </thead>
+            <tbody id="rawExcelTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 하단 [참고] 비예산 수치 지표 테이블 -->
+      <div class="card-box">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="card-title">📏 [참고] 본문 박스 내 비예산 수치 지표 (인원 · 보상비 단가 · 보수 · 장려금 · 급식비 등)</div>
+            <div class="card-subtitle">예산(억원) 외 보도자료 본문 박스에 함께 명시된 주요 정량 지표 변화 추이</div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="budget-table">
+            <thead>
+              <tr>
+                <th style="width:70px;">분야번호</th>
+                <th style="width:190px;">중점 투자사업 분야</th>
+                <th>박스 내 지표명</th>
+                <th style="width:80px;">단위</th>
+                <th style="width:110px;">2026년 수치</th>
+                <th style="width:110px;">2027년 수치</th>
+                <th style="width:100px;">증감폭</th>
+                <th style="width:90px;">증감률</th>
+                <th>비고 (박스 원문 내용)</th>
+              </tr>
+            </thead>
+            <tbody id="nonBudgetTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 새 예산 항목 추가 모달 -->
+  <div class="modal-backdrop" id="addRowModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 style="font-size:16px; font-weight:800;">➕ 새 예산 사업·항목 추가</h3>
+        <button type="button" class="btn btn-outline" id="btnCloseAddModal">✕ 닫기</button>
+      </div>
+      <form id="addRowForm">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="fCatNo">분야번호</label>
+            <select id="fCatNo">
+              <option value="①">① 전작권 전환 및 자주국방 확충</option>
+              <option value="②">② 미래 병력구조 개편</option>
+              <option value="③">③ AI·유무인 복합체계 첨단 전력 전환</option>
+              <option value="④">④ 드론·대드론 역량 강화</option>
+              <option value="⑤">⑤ 장병 복무여건 개선 및 복지 강화</option>
+              <option value="⑥">⑥ 미래 국방기술 투자 확대</option>
+              <option value="⑦">⑦ 중소·벤처기업 방산 진입 및 성장 지원</option>
+              <option value="⑧">⑧ AI·디지털 국민체감형 병무서비스 확대</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="fCategory">중점 투자사업 분야명</label>
+            <input type="text" id="fCategory" value="미래 국방기술 투자 확대" required />
+          </div>
+          <div class="form-group full">
+            <label for="fProjectName">박스 내 세부 사업·항목명</label>
+            <input type="text" id="fProjectName" placeholder="예: 양자암호통신 국방 실증 신규 사업" required />
+          </div>
+          <div class="form-group">
+            <label for="fType">예산 구분 (신규 포함 시 신규사업 분류)</label>
+            <select id="fType">
+              <option value="박스 직접예산(신규)">박스 직접예산(신규)</option>
+              <option value="박스 내역(신규)">박스 내역(신규)</option>
+              <option value="붙임2 연계예산(신규)">붙임2 연계예산(신규)</option>
+              <option value="박스 직접예산">박스 직접예산</option>
+              <option value="붙임2 연계예산">붙임2 연계예산</option>
+              <option value="중점분야 총괄">중점분야 총괄</option>
+              <option value="박스 내역사업">박스 내역사업</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="fBudget2026">2026년 예산 (억원, 신규는 0)</label>
+            <input type="number" step="0.1" id="fBudget2026" value="0" required />
+          </div>
+          <div class="form-group">
+            <label for="fBudget2027">2027년 예산 (억원)</label>
+            <input type="number" step="0.1" id="fBudget2027" value="100" required />
+          </div>
+          <div class="form-group full">
+            <label for="fNote">박스 원문 표기 및 참고사항</label>
+            <input type="text" id="fNote" placeholder="예: 박스 내 (신규 100억원) 표기" />
+          </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="submit" class="btn btn-primary">추가 및 대시보드 반영</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 우측 하단 알림 토스트 컨테이너 -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/parser.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
